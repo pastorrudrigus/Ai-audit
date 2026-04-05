@@ -1,0 +1,21 @@
+{
+  "name": "@aigate/db",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.ts",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "tsx seed/index.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.30.10",
+    "@neondatabase/serverless": "^0.9.3",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "drizzle-kit": "^0.21.4",
+    "tsx": "^4.11.0",
+    "@types/node": "^20.12.12"
+  }
+}
