@@ -61,7 +61,9 @@ export async function verifyRoute(
   fastify: FastifyInstance,
   db: ReturnType<typeof createDb>
 ) {
-  const redis = buildRedis();
+  // Upstash Redis satisfaz o RedisLike do @aigate/verify (mesmos métodos get/set),
+  // mas seus tipos genéricos são mais estritos — cast controlado é seguro aqui.
+  const redis = buildRedis() as unknown as import("@aigate/verify").RedisLike | undefined;
   const sources: CitationSource[] = [createWebSearchSource()];
 
   fastify.post("/v1/verify", async (request, reply) => {

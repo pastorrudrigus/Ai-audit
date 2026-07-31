@@ -5,6 +5,7 @@
   "main": "./index.ts",
   "dependencies": {
     "@aigate/db": "workspace:*",
+    "drizzle-orm": "^0.30.10",
     "fuse.js": "^7.0.0",
     "zod": "^3.23.8"
   },

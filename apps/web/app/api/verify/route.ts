@@ -87,7 +87,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const result = await verifyCitations(citations, { sources, redis: getRedis() });
+  // Upstash Redis satisfaz o RedisLike do @aigate/verify — cast controlado.
+  const redis = getRedis() as unknown as
+    | import("@aigate/verify").RedisLike
+    | undefined;
+  const result = await verifyCitations(citations, { sources, redis });
 
   await db.insert(requestLogs).values({
     orgId,
