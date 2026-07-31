@@ -344,8 +344,8 @@ export default function DemoPage() {
               { step: "1. AUTH", desc: "Bearer aig_sk_... → SHA-256 hash → valida API key", color: "bg-slate-100 text-slate-700" },
               { step: "2. POLICY", desc: "Model access, rate limit", color: "bg-violet-100 text-violet-700" },
               { step: "3. DLP", desc: "CPF, CNPJ, cartão, API key → block/mask", color: "bg-red-100 text-red-700" },
-              { step: "4. BUDGET", desc: "Hard limit → 402, Soft → alerta", color: "bg-amber-100 text-amber-700" },
-              { step: "5. ROUTE", desc: "Routing rules por prioridade", color: "bg-blue-100 text-blue-700" },
+              { step: "4. ROUTE", desc: "Routing rules por prioridade", color: "bg-blue-100 text-blue-700" },
+              { step: "5. BUDGET", desc: "Hard limit → 402, Soft → alerta", color: "bg-amber-100 text-amber-700" },
               { step: "6. FORWARD", desc: "OpenAI ou Anthropic adapter", color: "bg-green-100 text-green-700" },
               { step: "7. LOG", desc: "request_logs + atualiza budget", color: "bg-slate-100 text-slate-700" },
             ].map((item, i) => (
@@ -464,7 +464,14 @@ export default function DemoPage() {
           </div>
         </div>
 
-        <div className="mt-8 text-center">
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Link
+            href="/tech"
+            className="inline-flex items-center gap-2 bg-white border border-slate-200 hover:border-slate-300 text-slate-700 rounded-lg px-6 py-3 font-medium transition-colors"
+          >
+            <Cpu className="w-4 h-4" />
+            Stack, banco e regras de negócio
+          </Link>
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-3 font-medium transition-colors"
