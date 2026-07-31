@@ -11,6 +11,7 @@ import {
   scanMessages,
   tokenizePII,
   summarizeMatches,
+  TokenAllocator,
   type DLPMatch,
   type EntityMapping,
 } from "./dlp";
@@ -44,6 +45,19 @@ interface DlpPolicyRules {
   action?: "block" | "warn" | "anonymize" | "mask";
   patterns?: string[];
   nerTypes?: string[];
+}
+
+/**
+ * Payload cifrado com AES-256-GCM e entregue ao cliente como `tutela.entity_map`.
+ * Endpoints de reveal precisam checar `orgId` (e opcionalmente `userId`) contra
+ * a sessão antes de devolver os valores originais. `v` reserva espaço para
+ * evoluir o formato sem quebrar clientes antigos.
+ */
+export interface EntityMapEnvelope {
+  v: 1;
+  orgId: string;
+  userId?: string;
+  entities: EntityMapping[];
 }
 
 interface RoutingConditions {
@@ -157,7 +171,12 @@ export async function runPipeline(
           };
         }
       } else {
-        // anonymize | warn | mask: tokeniza (reversível) as mensagens do usuário e system
+        // anonymize | warn | mask: tokeniza (reversível) as mensagens do
+        // usuário e system usando UM ÚNICO alocador para toda a request.
+        // Isso impede colisões entre mensagens (⟨PESSOA_1⟩ significar João
+        // numa mensagem e Maria em outra) e corrompimento na restauração.
+        const allocator = new TokenAllocator();
+
         const perMessageMatches = new Map<number, DLPMatch[]>();
         request.messages.forEach((m, i) => {
           if (m.role !== "user" && m.role !== "system") return;
@@ -166,10 +185,15 @@ export async function runPipeline(
         });
 
         const perMessageMasked = new Map<number, string>();
-        const allEntities: EntityMapping[] = [];
         let regexCount = 0;
         let nerCount = 0;
+        let nerSkippedAsAlreadyProcessed = 0;
         const byType: Record<string, number> = {};
+
+        // Padrão de token pré-existente — indica mensagem que já passou pelo
+        // pipeline em um turno anterior. NER re-analisá-la é puro desperdício
+        // (o histórico é reenviado a cada turno do chat).
+        const TOKEN_RE = /⟨[A-Z_]+_\d+⟩/;
 
         for (let i = 0; i < request.messages.length; i++) {
           const msg = request.messages[i];
@@ -181,36 +205,38 @@ export async function runPipeline(
             byType[m.type] = (byType[m.type] ?? 0) + 1;
           }
 
-          // 1º: aplica regex → texto parcialmente tokenizado
-          const regexPass = tokenizePII(msg.content, regexMatches);
-          let messageMasked = regexPass.maskedText;
-          const messageEntities: EntityMapping[] = [...regexPass.entityMap];
+          const wasAlreadyProcessed = TOKEN_RE.test(msg.content);
 
-          // 2º: NER opcional apenas para anonymize, rodando sobre o texto já tokenizado
-          // (evita o LLM re-detectar o que a regex pegou).
-          if (action === "anonymize") {
+          // 1º: regex sobre o texto original → texto parcialmente tokenizado
+          const regexPass = tokenizePII(msg.content, regexMatches, allocator);
+          let messageMasked = regexPass.maskedText;
+
+          // 2º: NER opcional. Pula em duas condições:
+          //   a) action != anonymize (warn/mask não precisam de NER);
+          //   b) a mensagem já vinha pré-tokenizada de turno anterior — nesse
+          //      caso o NER foi rodado antes e a repetição só quema custo.
+          if (action === "anonymize" && !wasAlreadyProcessed) {
             const nerTypes = rules.nerTypes ?? ["PESSOA", "EMPRESA", "ENDERECO", "VALOR"];
             if (nerTypes.length > 0) {
               const ner = await detectNamedEntities(messageMasked, { types: nerTypes });
 
-              // status agregado: qualquer failed sobrescreve; senão pega o primeiro observado
               if (nerStatus === "not_run") nerStatus = ner.status;
               else if (ner.status === "failed") nerStatus = "failed";
 
               if (ner.matches.length > 0) {
-                const nerPass = tokenizePII(messageMasked, ner.matches);
+                const nerPass = tokenizePII(messageMasked, ner.matches, allocator);
                 messageMasked = nerPass.maskedText;
-                messageEntities.push(...nerPass.entityMap);
                 nerCount += ner.matches.length;
                 for (const m of ner.matches) {
                   byType[m.type] = (byType[m.type] ?? 0) + 1;
                 }
               }
             }
+          } else if (wasAlreadyProcessed) {
+            nerSkippedAsAlreadyProcessed += 1;
           }
 
           perMessageMasked.set(i, messageMasked);
-          allEntities.push(...messageEntities);
         }
 
         if (perMessageMasked.size > 0) {
@@ -220,11 +246,9 @@ export async function runPipeline(
           };
         }
 
-        // Deduplica entityMap por token (mesmo token pode ter sido gerado
-        // em mensagens diferentes com valores idênticos).
-        const dedup = new Map<string, EntityMapping>();
-        for (const e of allEntities) if (!dedup.has(e.token)) dedup.set(e.token, e);
-        entityMap = [...dedup.values()];
+        // O mapa completo vem do alocador — não precisa dedup manual porque
+        // TokenAllocator.allocate já garante um token por (type, valor).
+        entityMap = allocator.getEntityMap();
         anonymizedCount = entityMap.length;
 
         const total = regexCount + nerCount;
@@ -237,6 +261,7 @@ export async function runPipeline(
           nerStatus: action === "anonymize" ? nerStatus : ("not_run" as const),
           totalCount: total,
           bySource: { regex: regexCount, ner: nerCount },
+          nerSkippedAsAlreadyProcessed,
           byType,
           severity: hasCritical ? "critical" : hasHigh ? "high" : "medium",
         };
@@ -376,13 +401,23 @@ export async function runPipeline(
       forwardResult.outputTokens
     );
 
-    // Cifra o entityMap (nunca vai em claro para o cliente)
+    // Cifra o entityMap (nunca vai em claro para o cliente). O envelope
+    // carrega orgId (e userId, se conhecido) para amarrar o blob ao tenant
+    // dono. Endpoints de reveal (/api/chat/reveal, /reveal-map) rejeitam
+    // qualquer blob cuja sessão não bata com esses campos — sem isso, um
+    // login válido de outra banca conseguiria decifrar um blob que vazasse.
     let entityMapEncrypted: string | undefined;
     if (entityMap.length > 0 && config.encryptEntityMap) {
       try {
-        entityMapEncrypted = config.encryptEntityMap(JSON.stringify(entityMap));
+        const envelope: EntityMapEnvelope = {
+          v: 1,
+          orgId: ctx.orgId,
+          userId: ctx.userId,
+          entities: entityMap,
+        };
+        entityMapEncrypted = config.encryptEntityMap(JSON.stringify(envelope));
       } catch {
-        // Falha ao cifrar: descarta em vez de vazar em claro
+        // Falha ao cifrar → descarta em vez de vazar em claro.
         entityMapEncrypted = undefined;
       }
     }

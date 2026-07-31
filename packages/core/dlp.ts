@@ -172,43 +172,117 @@ function tokenLabelFor(type: string): string {
  * @param text Texto original.
  * @param matches Matches vindos de scanForPII e/ou do NER (packages/core/ner.ts).
  */
-export function tokenizePII(text: string, matches: DLPMatch[]): TokenizeResult {
-  if (matches.length === 0) return { maskedText: text, entityMap: [] };
+/**
+ * Alocador de tokens estável dentro de um mesmo escopo (tipicamente uma
+ * request do pipeline). Garantia crítica: chamadas sucessivas de tokenizePII
+ * com o mesmo alocador nunca produzem colisão de tokens (⟨PESSOA_1⟩ para
+ * "João" na mensagem A e ⟨PESSOA_1⟩ para "Maria" na B). O contador vive
+ * aqui, não dentro de tokenizePII.
+ */
+export class TokenAllocator {
+  private tokenByKey = new Map<string, string>();
+  private counterByType = new Map<string, number>();
+  private entities: EntityMapping[] = [];
 
-  // Consistência: mesmo (type, valor original) → mesmo token
-  const tokenByKey = new Map<string, string>();
-  const counterByType = new Map<string, number>();
-  const entityMap: EntityMapping[] = [];
-
-  for (const m of matches) {
-    const key = `${m.type}::${m.match}`;
-    if (tokenByKey.has(key)) continue;
-    const label = tokenLabelFor(m.type);
-    const n = (counterByType.get(label) ?? 0) + 1;
-    counterByType.set(label, n);
+  /**
+   * Devolve um token para o par (type, original). Reusa o token existente
+   * quando a mesma combinação já foi vista — é a garantia de consistência
+   * referencial ("o autor" continua sendo a mesma pessoa em todo o texto).
+   */
+  allocate(type: string, original: string): string {
+    const key = `${type}::${original}`;
+    const existing = this.tokenByKey.get(key);
+    if (existing) return existing;
+    const label = tokenLabelFor(type);
+    const n = (this.counterByType.get(label) ?? 0) + 1;
+    this.counterByType.set(label, n);
     const token = `⟨${label}_${n}⟩`;
-    tokenByKey.set(key, token);
-    entityMap.push({ token, original: m.match, type: m.type });
+    this.tokenByKey.set(key, token);
+    this.entities.push({ token, original, type });
+    return token;
   }
 
-  // Deduplicar por posição e ordenar por comprimento desc.
-  const dedup = new Map<string, DLPMatch>();
-  for (const m of matches) {
-    const posKey = `${m.position.start}:${m.position.end}`;
-    if (!dedup.has(posKey)) dedup.set(posKey, m);
+  /** Snapshot imutável do mapa acumulado até agora. */
+  getEntityMap(): EntityMapping[] {
+    return [...this.entities];
   }
-  // Substituições da direita para a esquerda para preservar índices.
-  const byPositionDesc = [...dedup.values()].sort(
+
+  /** Total de entidades tarjadas — usado no badge "N dados tarjados". */
+  size(): number {
+    return this.entities.length;
+  }
+}
+
+/**
+ * Descarta matches parcialmente sobrepostos, mantendo o mais longo em caso
+ * de sobreposição. Padrões concorrentes (ex.: CPF e processo CNJ) podem
+ * reconhecer trechos que se cruzam; sem esse filtro, a substituição
+ * direita-para-esquerda produziria texto corrompido.
+ */
+function filterOverlaps(matches: DLPMatch[]): DLPMatch[] {
+  if (matches.length <= 1) return matches;
+  const sorted = [...matches].sort((a, b) => {
+    const s = a.position.start - b.position.start;
+    if (s !== 0) return s;
+    return (b.position.end - b.position.start) - (a.position.end - a.position.start);
+  });
+  const kept: DLPMatch[] = [];
+  let coverEnd = -1;
+  for (const m of sorted) {
+    if (m.position.start >= coverEnd) {
+      kept.push(m);
+      coverEnd = m.position.end;
+    } else if (m.position.end > coverEnd) {
+      const last = kept[kept.length - 1];
+      const lastLen = last.position.end - last.position.start;
+      const curLen = m.position.end - m.position.start;
+      if (curLen > lastLen) {
+        kept[kept.length - 1] = m;
+        coverEnd = m.position.end;
+      }
+    }
+    // contido no já coberto → descarta
+  }
+  return kept;
+}
+
+export function tokenizePII(
+  text: string,
+  matches: DLPMatch[],
+  allocator?: TokenAllocator
+): TokenizeResult {
+  if (matches.length === 0) {
+    return {
+      maskedText: text,
+      entityMap: allocator ? allocator.getEntityMap() : [],
+    };
+  }
+
+  const alloc = allocator ?? new TokenAllocator();
+  const entitiesBefore = alloc.size();
+
+  // Resolve sobreposições antes de aplicar substituições.
+  const filtered = filterOverlaps(matches);
+
+  // Substituições da direita para a esquerda preservam índices.
+  const byPositionDesc = [...filtered].sort(
     (a, b) => b.position.start - a.position.start
   );
 
   let result = text;
   for (const m of byPositionDesc) {
-    const key = `${m.type}::${m.match}`;
-    const token = tokenByKey.get(key)!;
+    const token = alloc.allocate(m.type, m.match);
     result =
       result.slice(0, m.position.start) + token + result.slice(m.position.end);
   }
+
+  // Sem alocador externo → devolve o mapa completo do alocador interno.
+  // Com alocador externo → devolve só o delta desta chamada (útil para
+  // observabilidade por mensagem). O chamador que precisa do mapa completo
+  // usa allocator.getEntityMap().
+  const entityMap = allocator
+    ? alloc.getEntityMap().slice(entitiesBefore)
+    : alloc.getEntityMap();
 
   return { maskedText: result, entityMap };
 }

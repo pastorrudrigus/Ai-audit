@@ -44,7 +44,7 @@ Postgres (Neon) — schemas em `packages/db/schema/`.
 | Contagens de tarjas por tipo | Sim em `request_logs.dlpFlags` | JSON agregado: `{ totalCount, byType, severity }`. |
 | Chave do gateway (`aig_sk_`) | Só o hash SHA-256 (`api_keys.key_hash`). | Chave em claro é exibida uma única vez, na criação. |
 | Chave do provedor de LLM | Sim em `providers.api_key_encrypted`. | **AES-256-GCM**, formato `iv:authTag:ciphertext`. Descriptografada em memória apenas no momento do forward. |
-| Mapa token→valor original | **Nunca** persistido. | Retornado ao cliente cifrado com AES-256-GCM, no campo `tutela.entity_map`. A decifração acontece no servidor Next (endpoint `/api/chat/reveal`) usando a mesma `ENCRYPTION_KEY`. |
+| Mapa token→valor original | **Nunca** persistido. | Retornado ao cliente cifrado com AES-256-GCM, no campo `tutela.entity_map`, dentro de um envelope `{ v, orgId, userId, entities }`. A decifração acontece no servidor Next (endpoint `/api/chat/reveal`) usando a mesma `ENCRYPTION_KEY`, e o `orgId` do envelope é comparado com a sessão Clerk antes de qualquer retorno — blob de outra org **retorna 403** mesmo com login válido. |
 | Verificação de citações | Sim em `request_logs.metadata` (agregado: `total`, `confirmada`, `divergente`, `nao_encontrada`). | Sem os textos das citações. |
 | Cache de verificação | Redis (Upstash), TTL 7 dias, chave = hash SHA-256 da referência normalizada. | Apenas o resultado (status/observação/fonte), nunca dados do escritório. |
 
