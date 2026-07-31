@@ -67,5 +67,14 @@ export interface PipelineResult {
   latencyMs: number;
   status: "success" | "error" | "blocked_policy" | "blocked_budget" | "blocked_dlp";
   blockedReason?: string;
+  /** Contagens agregadas por tipo e severidade — SEM valores originais. */
   dlpFlags?: unknown;
+  /**
+   * Mapa de entidades cifrado com AES-256-GCM para desanonimização client-side.
+   * Nunca contém dados em claro. Presente apenas quando a policy DLP roda em
+   * modo "anonymize".
+   */
+  entityMapEncrypted?: string;
+  /** Total de entidades tokenizadas — para exibição na UI ("N dados tarjados"). */
+  anonymizedCount?: number;
 }

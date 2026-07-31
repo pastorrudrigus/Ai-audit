@@ -1,7 +1,14 @@
 import { pgTable, uuid, varchar, jsonb, boolean, timestamp, pgEnum } from "drizzle-orm/pg-core";
 import { organizations } from "./organizations";
 
-export const policyTypeEnum = pgEnum("policy_type", ["dlp", "model_access", "rate_limit", "budget", "content"]);
+export const policyTypeEnum = pgEnum("policy_type", [
+  "dlp",
+  "model_access",
+  "rate_limit",
+  "budget",
+  "content",
+  "citation_check",
+]);
 
 export const policies = pgTable("policies", {
   id: uuid("id").primaryKey().defaultRandom(),

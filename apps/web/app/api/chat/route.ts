@@ -5,6 +5,7 @@ import { conversations, messages, requestLogs, providers, users } from "@aigate/
 import { runPipeline, AppError } from "@aigate/core";
 import type { PipelineContext } from "@aigate/core";
 import { eq } from "drizzle-orm";
+import { encrypt } from "@/lib/encryption";
 
 const getOrgId = () => process.env.DEMO_ORG_ID ?? "";
 
@@ -121,6 +122,8 @@ export async function POST(req: NextRequest) {
       const data = await res.json();
       return { response: data, inputTokens: data.usage?.prompt_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? 0 };
     },
+    // Cifra o entityMap com ENCRYPTION_KEY para viagem segura ao cliente.
+    encryptEntityMap: (json) => encrypt(json),
   });
 
   if (!result.success) {
@@ -133,10 +136,11 @@ export async function POST(req: NextRequest) {
   const assistantContent =
     result.response?.choices?.[0]?.message?.content ?? "";
 
-  // Log request
+  // Log request — grava contagens de anonimização SEM valores originais
   const [log] = await db.insert(requestLogs).values({
     orgId,
     userId: user?.id ?? null,
+    departmentId: user?.departmentId ?? null,
     source: "web_interface",
     providerType: provider?.providerType ?? "openai",
     modelId: model,
@@ -146,6 +150,7 @@ export async function POST(req: NextRequest) {
     costUsd: result.costUsd.toFixed(6),
     latencyMs: result.latencyMs,
     status: result.status,
+    dlpFlags: (result.dlpFlags as object | undefined) ?? null,
   }).returning();
 
   // Save assistant message
@@ -166,5 +171,10 @@ export async function POST(req: NextRequest) {
       costUsd: result.costUsd.toFixed(6),
     },
     latencyMs: result.latencyMs,
+    tutela: {
+      entity_map: result.entityMapEncrypted ?? null,
+      anonymized_count: result.anonymizedCount ?? 0,
+      dlp_flags: result.dlpFlags ?? null,
+    },
   });
 }

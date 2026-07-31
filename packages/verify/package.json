@@ -1,0 +1,14 @@
+{
+  "name": "@aigate/verify",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.ts",
+  "dependencies": {
+    "@upstash/redis": "^1.31.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "typescript": "^5.4.5"
+  }
+}

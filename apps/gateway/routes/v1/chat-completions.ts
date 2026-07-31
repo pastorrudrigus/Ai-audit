@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { AppError, runPipeline } from "@aigate/core";
 import type { PipelineContext } from "@aigate/core";
 import { apiKeys, requestLogs, providers } from "@aigate/db";
-import { hashApiKey, decrypt } from "../../utils/encryption";
+import { hashApiKey, decrypt, encrypt } from "../../utils/encryption";
 import { forwardToOpenAI } from "../../providers/openai-adapter";
 import { forwardToAnthropic } from "../../providers/anthropic-adapter";
 import type { createDb } from "@aigate/db";
@@ -98,6 +98,10 @@ export async function chatCompletionsRoute(
         }
         return forwardToOpenAI(modelId, apiKeyStr, baseUrl, req);
       },
+      // Cifra o entityMap com a mesma chave (ENCRYPTION_KEY) que protege as
+      // credenciais dos providers. O cliente recebe o texto cifrado e decifra
+      // com a mesma chave — assim o gateway nunca persiste PII em claro.
+      encryptEntityMap: (json) => encrypt(json),
     });
 
     // Log the request
@@ -131,6 +135,19 @@ export async function chatCompletionsRoute(
       return reply.status(statusCode).send({ error: result.error?.message ?? "Error" });
     }
 
-    return reply.send(result.response);
+    // Envelope Tutela: acopla os metadados de anonimização ao corpo da resposta
+    // OpenAI-compatible. Clientes que não conhecem o campo simplesmente ignoram.
+    const responseBody =
+      result.entityMapEncrypted || result.anonymizedCount
+        ? {
+            ...result.response,
+            tutela: {
+              entity_map: result.entityMapEncrypted ?? null,
+              anonymized_count: result.anonymizedCount ?? 0,
+            },
+          }
+        : result.response;
+
+    return reply.send(responseBody);
   });
 }

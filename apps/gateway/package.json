@@ -10,6 +10,7 @@
   "dependencies": {
     "@aigate/core": "workspace:*",
     "@aigate/db": "workspace:*",
+    "@aigate/verify": "workspace:*",
     "@upstash/redis": "^1.31.3",
     "fastify": "^4.27.0",
     "@fastify/cors": "^9.0.1",

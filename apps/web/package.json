@@ -11,6 +11,7 @@
   "dependencies": {
     "@aigate/core": "workspace:*",
     "@aigate/db": "workspace:*",
+    "@aigate/verify": "workspace:*",
     "@clerk/nextjs": "^5.2.4",
     "@neondatabase/serverless": "^0.9.3",
     "@radix-ui/react-alert-dialog": "^1.1.1",
