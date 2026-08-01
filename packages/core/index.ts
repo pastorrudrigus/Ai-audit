@@ -1,4 +1,5 @@
 export * from "./types";
+export * from "./attachments";
 export * from "./dlp";
 export * from "./ner";
 export * from "./cost";

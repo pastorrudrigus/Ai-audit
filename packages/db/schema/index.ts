@@ -10,6 +10,7 @@ export * from "./policies";
 export * from "./request-logs";
 export * from "./conversations";
 export * from "./messages";
+export * from "./attachments";
 export * from "./budgets";
 export * from "./alerts";
 export * from "./ai-tools";

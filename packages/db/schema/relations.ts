@@ -10,6 +10,7 @@ import { policies } from "./policies";
 import { requestLogs } from "./request-logs";
 import { conversations } from "./conversations";
 import { messages } from "./messages";
+import { attachments } from "./attachments";
 import { budgets } from "./budgets";
 import { alerts } from "./alerts";
 import { aiTools } from "./ai-tools";
@@ -74,11 +75,20 @@ export const conversationsRelations = relations(conversations, ({ one, many }) =
   organization: one(organizations, { fields: [conversations.orgId], references: [organizations.id] }),
   user: one(users, { fields: [conversations.userId], references: [users.id] }),
   messages: many(messages),
+  attachments: many(attachments),
 }));
 
-export const messagesRelations = relations(messages, ({ one }) => ({
+export const messagesRelations = relations(messages, ({ one, many }) => ({
   conversation: one(conversations, { fields: [messages.conversationId], references: [conversations.id] }),
   requestLog: one(requestLogs, { fields: [messages.requestLogId], references: [requestLogs.id] }),
+  attachments: many(attachments),
+}));
+
+export const attachmentsRelations = relations(attachments, ({ one }) => ({
+  organization: one(organizations, { fields: [attachments.orgId], references: [organizations.id] }),
+  conversation: one(conversations, { fields: [attachments.conversationId], references: [conversations.id] }),
+  message: one(messages, { fields: [attachments.messageId], references: [messages.id] }),
+  user: one(users, { fields: [attachments.userId], references: [users.id] }),
 }));
 
 export const subscriptionsRelations = relations(subscriptions, ({ one, many }) => ({

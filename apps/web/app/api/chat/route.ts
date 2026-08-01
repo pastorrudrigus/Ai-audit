@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { conversations, messages, requestLogs, providers, users } from "@aigate/db";
-import { runPipeline, AppError } from "@aigate/core";
+import { attachments, conversations, messages, requestLogs, providers, users } from "@aigate/db";
+import { runPipeline, AppError, composeContentWithAttachments } from "@aigate/core";
 import type { PipelineContext } from "@aigate/core";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { encrypt } from "@/lib/encryption";
 
 const getOrgId = () => process.env.DEMO_ORG_ID ?? "";
@@ -15,15 +15,22 @@ export async function POST(req: NextRequest) {
 
   const orgId = getOrgId();
   const body = await req.json();
-  const { conversationId, message, model = "gpt-4o-mini", systemPrompt } = body as {
+  const {
+    conversationId,
+    message,
+    model = "gpt-4o-mini",
+    systemPrompt,
+    attachmentIds = [],
+  } = body as {
     conversationId?: string;
     message: string;
     model?: string;
     systemPrompt?: string;
+    attachmentIds?: string[];
   };
 
-  if (!message?.trim()) {
-    return NextResponse.json({ error: "Message required" }, { status: 400 });
+  if (!message?.trim() && attachmentIds.length === 0) {
+    return NextResponse.json({ error: "Message or attachments required" }, { status: 400 });
   }
 
   // Get user
@@ -35,7 +42,8 @@ export async function POST(req: NextRequest) {
   // Get or create conversation
   let convId = conversationId;
   if (!convId) {
-    const title = message.slice(0, 60) + (message.length > 60 ? "..." : "");
+    const title = (message || "Conversa com anexos").slice(0, 60) +
+      ((message || "").length > 60 ? "..." : "");
     const [conv] = await db.insert(conversations).values({
       orgId,
       userId: user?.id ?? orgId,
@@ -44,25 +52,50 @@ export async function POST(req: NextRequest) {
     convId = conv.id;
   }
 
-  // Save user message
-  await db.insert(messages).values({
+  // Save user message (só o texto digitado — o anexo fica em attachments,
+  // vinculado por messageId depois do insert)
+  const [insertedUserMsg] = await db.insert(messages).values({
     conversationId: convId,
     role: "user",
-    content: message,
-  });
+    content: message ?? "",
+  }).returning();
 
-  // Build messages array for pipeline
+  // Vincula os anexos pendentes escolhidos ao novo message. WHERE amarra por
+  // orgId + conversationId + status/pendente — impossível linkar anexo de
+  // outra banca ou de outra conversa mesmo se o cliente mandar o id.
+  if (attachmentIds.length > 0) {
+    await db
+      .update(attachments)
+      .set({ messageId: insertedUserMsg.id, status: "attached" })
+      .where(
+        and(
+          inArray(attachments.id, attachmentIds),
+          eq(attachments.orgId, orgId),
+          eq(attachments.conversationId, convId),
+          isNull(attachments.messageId),
+        ),
+      );
+  }
+
+  // Build messages array for pipeline — juntando texto de anexos por message
   const allMessages = await db.query.messages.findMany({
     where: (m, { eq }) => eq(m.conversationId, convId!),
     orderBy: (m, { asc }) => [asc(m.createdAt)],
+    with: { attachments: true },
   });
 
   const requestMessages = [
     ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
-    ...allMessages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content,
-    })),
+    ...allMessages.map((m) => {
+      const usable = (m.attachments ?? []).filter((a) => a.status === "attached" && a.charCount > 0);
+      const content = m.role === "user"
+        ? composeContentWithAttachments(m.content, usable.map((a) => ({
+            filename: a.filename,
+            extractedText: a.extractedText,
+          })))
+        : m.content;
+      return { role: m.role as "user" | "assistant", content };
+    }),
   ];
 
   // Get provider

@@ -18,7 +18,7 @@ export async function GET(
   const msgs = await db.query.messages.findMany({
     where: (m, { eq }) => eq(m.conversationId, params.conversationId),
     orderBy: (m, { asc }) => [asc(m.createdAt)],
-    with: { requestLog: true },
+    with: { requestLog: true, attachments: true },
   });
 
   const messages = msgs.map((m) => ({
@@ -27,6 +27,16 @@ export async function GET(
     content: m.content,
     createdAt: m.createdAt,
     requestLogId: m.requestLogId,
+    // Metadados apenas — extractedText não sai daqui (só o servidor precisa).
+    attachments: (m.attachments ?? []).map((a) => ({
+      id: a.id,
+      filename: a.filename,
+      mimeType: a.mimeType,
+      sizeBytes: a.sizeBytes,
+      charCount: a.charCount,
+      pageCount: a.pageCount,
+      status: a.status,
+    })),
     usage: m.requestLog
       ? {
           inputTokens: m.requestLog.inputTokens,

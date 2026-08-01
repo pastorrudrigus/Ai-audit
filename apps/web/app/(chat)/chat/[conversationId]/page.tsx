@@ -14,7 +14,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Send, User, ArrowLeft, ShieldCheck, ScanSearch, Eye, EyeOff, Scale } from "lucide-react";
+import { Send, User, ArrowLeft, ShieldCheck, ScanSearch, Eye, EyeOff, Scale, Paperclip, FileText, X, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -39,6 +39,17 @@ interface DlpFlags {
   nerStatus?: string;
 }
 
+interface AttachmentMeta {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  charCount: number;
+  pageCount?: number | null;
+  status: "uploaded" | "attached" | "failed";
+  errorMessage?: string | null;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
@@ -49,6 +60,13 @@ interface Message {
   entityMap?: string | null;
   anonymizedCount?: number;
   dlpFlags?: DlpFlags | null;
+  attachments?: AttachmentMeta[];
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 type CitStatus = "confirmada" | "divergente" | "nao_encontrada" | "erro";
@@ -155,6 +173,10 @@ export default function ConversationPage() {
   /** token → valor original, por mensagem. */
   const [revealedByMsg, setRevealedByMsg] = useState<Record<string, Record<string, string>>>({});
   const [verifyState, setVerifyState] = useState<Record<string, VerifyState>>({});
+  /** Anexos pendentes (subidos mas ainda não enviados com uma mensagem). */
+  const [pendingAtts, setPendingAtts] = useState<AttachmentMeta[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -162,29 +184,84 @@ export default function ConversationPage() {
       .then((r) => r.json())
       .then((data) => setMessages(data.messages ?? []))
       .catch(() => {});
+    // Recupera anexos pendentes (usuário fechou a aba antes de enviar)
+    fetch(`/api/chat/${conversationId}/attachments?pending=1`)
+      .then((r) => r.json())
+      .then((data) => setPendingAtts(data.attachments ?? []))
+      .catch(() => {});
   }, [conversationId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  async function handleUploadFiles(files: FileList | File[]) {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of arr) {
+        const form = new FormData();
+        form.append("file", file);
+        const res = await fetch(`/api/chat/${conversationId}/attachments`, {
+          method: "POST",
+          body: form,
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error ?? `Falha ao enviar ${file.name}`);
+          continue;
+        }
+        if (data.status === "failed") {
+          toast.warning(`${data.filename}: ${data.errorMessage ?? "extração falhou"}`);
+        }
+        setPendingAtts((prev) => [...prev, data as AttachmentMeta]);
+      }
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  async function handleRemovePending(id: string) {
+    const prev = pendingAtts;
+    setPendingAtts((cur) => cur.filter((a) => a.id !== id));
+    const res = await fetch(`/api/chat/${conversationId}/attachments/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      // rollback silencioso
+      setPendingAtts(prev);
+      toast.error("Não foi possível remover o anexo.");
+    }
+  }
+
   async function handleSend() {
-    if (!input.trim() || loading) return;
+    if ((!input.trim() && pendingAtts.length === 0) || loading) return;
+    const attachedNow = pendingAtts.filter((a) => a.status !== "failed");
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: "user",
       content: input,
       createdAt: new Date().toISOString(),
+      attachments: attachedNow,
     };
     setMessages((prev) => [...prev, userMsg]);
+    const sentInput = input;
+    const sentAttIds = attachedNow.map((a) => a.id);
     setInput("");
+    setPendingAtts([]);
     setLoading(true);
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, message: input }),
+        body: JSON.stringify({
+          conversationId,
+          message: sentInput,
+          attachmentIds: sentAttIds,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -325,18 +402,40 @@ export default function ConversationPage() {
               </div>
 
               <div className={cn("max-w-[85%] space-y-2", msg.role === "user" ? "items-end" : "items-start")}>
-                <div className={cn(
-                  "rounded-xl px-4 py-3 text-sm leading-relaxed border",
-                  msg.role === "user"
-                    ? "bg-[#1B2130] text-white border-[#1B2130] rounded-tr-sm"
-                    : "bg-white text-slate-800 border-slate-200 rounded-tl-sm"
-                )}>
-                  <TarjaText
-                    text={msg.content}
-                    revealed={revealed}
-                    onRevealAll={() => handleReveal(msg)}
-                  />
-                </div>
+                {msg.role === "user" && msg.attachments && msg.attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 justify-end">
+                    {msg.attachments.map((a) => (
+                      <span
+                        key={a.id}
+                        className="inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-300 bg-white/90 text-slate-700 px-2 py-1"
+                        title={a.errorMessage ?? undefined}
+                      >
+                        <FileText className="w-3 h-3 text-[#1F5C45]" />
+                        <span className="max-w-[220px] truncate">{a.filename}</span>
+                        <span className="text-slate-400">
+                          {a.pageCount ? `${a.pageCount}p · ` : ""}{formatBytes(a.sizeBytes)}
+                        </span>
+                        {a.status === "failed" && (
+                          <span className="text-[10px] text-amber-700">falha</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {(msg.role !== "user" || msg.content.length > 0) && (
+                  <div className={cn(
+                    "rounded-xl px-4 py-3 text-sm leading-relaxed border",
+                    msg.role === "user"
+                      ? "bg-[#1B2130] text-white border-[#1B2130] rounded-tr-sm"
+                      : "bg-white text-slate-800 border-slate-200 rounded-tl-sm"
+                  )}>
+                    <TarjaText
+                      text={msg.content}
+                      revealed={revealed}
+                      onRevealAll={() => handleReveal(msg)}
+                    />
+                  </div>
+                )}
 
                 {/* Badges de proteção — mostradas na resposta do assistente */}
                 {msg.role === "assistant" && (
@@ -466,32 +565,89 @@ export default function ConversationPage() {
       </div>
 
       <div className="border-t border-slate-200 p-4 bg-white">
-        <div className="relative max-w-3xl mx-auto">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Escreva a consulta ou cole a peça a analisar..."
-            className="pr-12 resize-none min-h-[52px] max-h-[240px] bg-white"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-          />
-          <Button
-            size="icon"
-            className="absolute bottom-2 right-2 h-8 w-8 bg-[#1F5C45] hover:bg-[#194a37]"
-            onClick={handleSend}
-            disabled={loading || !input.trim()}
-          >
-            <Send className="w-3.5 h-3.5" />
-          </Button>
+        <div className="max-w-3xl mx-auto space-y-2">
+          {(pendingAtts.length > 0 || uploading) && (
+            <div className="flex flex-wrap gap-1.5">
+              {pendingAtts.map((a) => (
+                <span
+                  key={a.id}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 text-xs rounded-md border px-2 py-1",
+                    a.status === "failed"
+                      ? "bg-amber-50 border-amber-200 text-amber-800"
+                      : "bg-slate-50 border-slate-200 text-slate-700"
+                  )}
+                  title={a.errorMessage ?? undefined}
+                >
+                  <FileText className="w-3 h-3 text-[#1F5C45]" />
+                  <span className="max-w-[220px] truncate">{a.filename}</span>
+                  <span className="text-slate-400">
+                    {a.pageCount ? `${a.pageCount}p · ` : ""}{formatBytes(a.sizeBytes)}
+                    {a.charCount > 0 ? ` · ${a.charCount.toLocaleString("pt-BR")} car.` : ""}
+                  </span>
+                  <button
+                    onClick={() => handleRemovePending(a.id)}
+                    className="text-slate-400 hover:text-slate-700 ml-0.5"
+                    aria-label={`Remover ${a.filename}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              {uploading && (
+                <span className="inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-200 bg-slate-50 text-slate-500 px-2 py-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  extraindo texto...
+                </span>
+              )}
+            </div>
+          )}
+          <div className="relative">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Escreva a consulta, cole a peça, ou anexe PDF/DOCX..."
+              className="pl-11 pr-12 resize-none min-h-[52px] max-h-[240px] bg-white"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+              className="hidden"
+              onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="absolute bottom-2 left-2 h-8 w-8 text-slate-500 hover:text-[#1F5C45]"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              title="Anexar PDF, DOCX ou TXT"
+              type="button"
+            >
+              <Paperclip className="w-4 h-4" />
+            </Button>
+            <Button
+              size="icon"
+              className="absolute bottom-2 right-2 h-8 w-8 bg-[#1F5C45] hover:bg-[#194a37]"
+              onClick={handleSend}
+              disabled={loading || uploading || (!input.trim() && pendingAtts.length === 0)}
+            >
+              <Send className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
         <p className="text-[11px] text-slate-500 text-center mt-2 max-w-3xl mx-auto">
           <ShieldCheck className="w-3 h-3 inline mr-1 text-[#1F5C45]" />
-          Dados sensíveis (CPF, nomes, números de processo) são tarjados antes de sair para o modelo.
-          A restauração acontece localmente com sua chave.
+          Dados sensíveis (CPF, nomes, números de processo) são tarjados antes de sair para o modelo —
+          inclusive dentro de anexos.
         </p>
       </div>
     </div>
