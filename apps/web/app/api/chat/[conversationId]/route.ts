@@ -36,6 +36,7 @@ export async function GET(
       charCount: a.charCount,
       pageCount: a.pageCount,
       status: a.status,
+      hasOriginal: Boolean(a.storageKey),
     })),
     usage: m.requestLog
       ? {

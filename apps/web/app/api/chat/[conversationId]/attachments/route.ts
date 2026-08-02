@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { attachments } from "@aigate/db";
+import { eq } from "drizzle-orm";
 import {
   extractText,
   guessMimeFromFilename,
   isSupportedMime,
   SUPPORTED_MIMES,
 } from "@/lib/extract";
+import { buildKey, getBucket, isStorageConfigured, putObject } from "@/lib/storage";
 
 const getOrgId = () => process.env.DEMO_ORG_ID ?? "";
 
@@ -60,6 +62,7 @@ export async function GET(
       status: a.status,
       messageId: a.messageId,
       errorMessage: a.errorMessage,
+      hasOriginal: Boolean(a.storageKey),
       createdAt: a.createdAt,
     })),
   });
@@ -160,6 +163,29 @@ export async function POST(
     errorMessage,
   }).returning();
 
+  // Sobe o binário original para R2 depois do insert (para ter attId na key).
+  // Falha aqui não é fatal — o texto extraído já está persistido; o usuário só
+  // perde a opção "baixar original". Anexo falhou-extração igualmente sobe:
+  // deixar para o sócio auditar depois.
+  let hasOriginal = false;
+  if (isStorageConfigured()) {
+    const key = buildKey(orgId, params.conversationId, row.id, row.filename);
+    try {
+      await putObject({
+        key,
+        body: buffer,
+        contentType: rawMime,
+        originalFilename: row.filename,
+      });
+      await db.update(attachments)
+        .set({ storageBucket: getBucket(), storageKey: key })
+        .where(eq(attachments.id, row.id));
+      hasOriginal = true;
+    } catch (err) {
+      console.error("[attachments] R2 putObject failed:", err);
+    }
+  }
+
   return NextResponse.json({
     id: row.id,
     filename: row.filename,
@@ -167,6 +193,7 @@ export async function POST(
     sizeBytes: row.sizeBytes,
     charCount: row.charCount,
     pageCount: row.pageCount,
+    hasOriginal,
     status: row.status,
     errorMessage: row.errorMessage,
   });

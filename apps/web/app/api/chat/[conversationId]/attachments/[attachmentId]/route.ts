@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { attachments } from "@aigate/db";
 import { and, eq, isNull } from "drizzle-orm";
+import { deleteObject } from "@/lib/storage";
 
 const getOrgId = () => process.env.DEMO_ORG_ID ?? "";
 
@@ -44,6 +45,16 @@ export async function DELETE(
       isNull(attachments.messageId),
     ),
   );
+
+  // Best-effort — se falhar aqui o objeto vira lixo no bucket mas o registro
+  // do banco já foi. Prefiro isso a um DELETE que só finaliza se R2 responder.
+  if (att.storageKey) {
+    try {
+      await deleteObject(att.storageKey);
+    } catch (err) {
+      console.error("[attachments] R2 deleteObject failed:", err);
+    }
+  }
 
   return NextResponse.json({ ok: true });
 }

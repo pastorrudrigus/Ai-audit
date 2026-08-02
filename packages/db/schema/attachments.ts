@@ -36,5 +36,10 @@ export const attachments = pgTable("attachments", {
   pageCount: integer("page_count"),
   status: attachmentStatusEnum("status").notNull().default("uploaded"),
   errorMessage: text("error_message"),
+  // Storage do binário original em R2/S3. Null = não armazenado (R2 não
+  // configurado no ambiente, ou upload falhou). Nesse caso o texto extraído
+  // ainda existe — só o download original fica indisponível.
+  storageBucket: varchar("storage_bucket", { length: 100 }),
+  storageKey: varchar("storage_key", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

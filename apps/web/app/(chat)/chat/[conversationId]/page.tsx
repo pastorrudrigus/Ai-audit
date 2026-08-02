@@ -48,6 +48,7 @@ interface AttachmentMeta {
   pageCount?: number | null;
   status: "uploaded" | "attached" | "failed";
   errorMessage?: string | null;
+  hasOriginal?: boolean;
 }
 
 interface Message {
@@ -414,22 +415,39 @@ export default function ConversationPage() {
               <div className={cn("max-w-[85%] space-y-2", msg.role === "user" ? "items-end" : "items-start")}>
                 {msg.role === "user" && msg.attachments && msg.attachments.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 justify-end">
-                    {msg.attachments.map((a) => (
-                      <span
-                        key={a.id}
-                        className="inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-300 bg-white/90 text-slate-700 px-2 py-1"
-                        title={a.errorMessage ?? undefined}
-                      >
-                        <FileText className="w-3 h-3 text-[#1F5C45]" />
-                        <span className="max-w-[220px] truncate">{a.filename}</span>
-                        <span className="text-slate-400">
-                          {formatPageCount(a.mimeType, a.pageCount) ? `${formatPageCount(a.mimeType, a.pageCount)} · ` : ""}{formatBytes(a.sizeBytes)}
+                    {msg.attachments.map((a) => {
+                      const chipInner = (
+                        <>
+                          <FileText className="w-3 h-3 text-[#1F5C45]" />
+                          <span className="max-w-[220px] truncate">{a.filename}</span>
+                          <span className="text-slate-400">
+                            {formatPageCount(a.mimeType, a.pageCount) ? `${formatPageCount(a.mimeType, a.pageCount)} · ` : ""}{formatBytes(a.sizeBytes)}
+                          </span>
+                          {a.status === "failed" && (
+                            <span className="text-[10px] text-amber-700">falha</span>
+                          )}
+                        </>
+                      );
+                      const chipClass = "inline-flex items-center gap-1.5 text-xs rounded-md border border-slate-300 bg-white/90 text-slate-700 px-2 py-1";
+                      return a.hasOriginal ? (
+                        <a
+                          key={a.id}
+                          href={`/api/chat/${conversationId}/attachments/${a.id}/download`}
+                          className={cn(chipClass, "hover:border-[#1F5C45] hover:text-[#1F5C45]")}
+                          title="Baixar arquivo original"
+                        >
+                          {chipInner}
+                        </a>
+                      ) : (
+                        <span
+                          key={a.id}
+                          className={chipClass}
+                          title={a.errorMessage ?? "Original não disponível"}
+                        >
+                          {chipInner}
                         </span>
-                        {a.status === "failed" && (
-                          <span className="text-[10px] text-amber-700">falha</span>
-                        )}
-                      </span>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
                 {(msg.role !== "user" || msg.content.length > 0) && (
