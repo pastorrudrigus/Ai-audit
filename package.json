@@ -13,10 +13,18 @@
     "test": "turbo test",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
-    "db:seed": "turbo db:seed"
+    "db:seed": "turbo db:seed",
+    "provision-banca": "tsx scripts/provision-banca.ts"
   },
   "devDependencies": {
+    "dotenv": "^16.6.1",
+    "tsx": "^4.23.1",
     "turbo": "^2.9.3",
     "typescript": "^5.4.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "drizzle-orm": "0.30.10"
+    }
   }
 }

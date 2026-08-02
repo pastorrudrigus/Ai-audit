@@ -6,7 +6,7 @@ import { departments } from "./departments";
 import { projects } from "./projects";
 
 export const requestSourceEnum = pgEnum("request_source", ["gateway", "web_interface"]);
-export const requestStatusEnum = pgEnum("request_status", ["success", "error", "blocked_policy", "blocked_budget", "blocked_dlp"]);
+export const requestStatusEnum = pgEnum("request_status", ["success", "error", "blocked_policy", "blocked_budget", "blocked_dlp", "blocked_injection"]);
 
 export const requestLogs = pgTable("request_logs", {
   id: uuid("id").primaryKey().defaultRandom(),

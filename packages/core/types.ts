@@ -65,7 +65,7 @@ export interface PipelineResult {
   outputTokens: number;
   costUsd: number;
   latencyMs: number;
-  status: "success" | "error" | "blocked_policy" | "blocked_budget" | "blocked_dlp";
+  status: "success" | "error" | "blocked_policy" | "blocked_budget" | "blocked_dlp" | "blocked_injection";
   blockedReason?: string;
   /** Contagens agregadas por tipo e severidade — SEM valores originais. */
   dlpFlags?: unknown;

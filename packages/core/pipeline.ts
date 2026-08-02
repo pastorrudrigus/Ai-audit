@@ -16,6 +16,7 @@ import {
   type EntityMapping,
 } from "./dlp";
 import { detectNamedEntities } from "./ner";
+import { scanForInjection, summarizeInjection, type InjectionMatch } from "./injection";
 import { calculateCost, estimateMessagesTokens, estimateCost } from "./cost";
 import { classifyComplexity } from "./complexity";
 
@@ -45,6 +46,13 @@ interface DlpPolicyRules {
   action?: "block" | "warn" | "anonymize" | "mask";
   patterns?: string[];
   nerTypes?: string[];
+  /**
+   * Se true, bloqueia a request quando o detector de prompt injection acha
+   * qualquer match com severidade >= "high". Default false (warn) porque
+   * falsos positivos são comuns em texto jurídico ("desconsidere a decisão
+   * anterior" não é ataque).
+   */
+  blockInjection?: boolean;
 }
 
 /**
@@ -148,10 +156,44 @@ export async function runPipeline(
     let anonymizedCount = 0;
     let nerStatus: "ok" | "skipped" | "failed" | "not_run" = "not_run";
 
+    // Injection scan — SEMPRE roda, independente de policy DLP. Cobrimos texto
+    // digitado + texto extraído de anexo (já composto no route). Default é
+    // WARN (log/flag, não bloqueia); block só se a policy dlp mandar
+    // explicitamente via rules.blockInjection.
+    const injectionMatches: InjectionMatch[] = [];
+    for (const m of request.messages) {
+      if (m.role !== "user") continue;
+      injectionMatches.push(...scanForInjection(m.content));
+    }
+    const injectionSummary = injectionMatches.length > 0
+      ? summarizeInjection(injectionMatches)
+      : null;
+
     if (dlpPolicy) {
       const rules = (dlpPolicy.rules as DlpPolicyRules) ?? {};
       const patterns = rules.patterns; // undefined = todos os padrões
       const action = rules.action ?? "warn";
+
+      // Injection: bloqueia se policy pedir E encontramos algo high/critical.
+      // Ficou aqui dentro do if(dlpPolicy) porque blockInjection é uma
+      // configuração da policy dlp — sem policy, roda em warn puro.
+      if (
+        rules.blockInjection &&
+        injectionSummary &&
+        (injectionSummary.severity === "high" || injectionSummary.severity === "critical")
+      ) {
+        return {
+          success: false,
+          inputTokens: 0,
+          outputTokens: 0,
+          costUsd: 0,
+          latencyMs: Date.now() - ctx.startTime,
+          status: "blocked_injection",
+          blockedReason: `Prompt injection detectado: ${Object.keys(injectionSummary.byCategory).join(", ")}`,
+          dlpFlags: { action, injection: injectionSummary },
+          error: new AppError("INJECTION_BLOCKED", "Content blocked by prompt injection detector", 403),
+        };
+      }
 
       // Ação block: mantém o comportamento antigo (bloqueia se detectar qualquer coisa).
       if (action === "block") {
@@ -264,8 +306,12 @@ export async function runPipeline(
           nerSkippedAsAlreadyProcessed,
           byType,
           severity: hasCritical ? "critical" : hasHigh ? "high" : "medium",
+          injection: injectionSummary,
         };
       }
+    } else if (injectionSummary) {
+      // Nenhuma policy DLP mas ainda queremos que injection seja visível no log.
+      dlpFlags = { action: "none", injection: injectionSummary };
     }
 
     // Step 3: Route resolution — avalia conditions de verdade

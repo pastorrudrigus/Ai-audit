@@ -1,6 +1,7 @@
 export * from "./types";
 export * from "./attachments";
 export * from "./dlp";
+export * from "./injection";
 export * from "./ner";
 export * from "./cost";
 export * from "./billing-matcher";

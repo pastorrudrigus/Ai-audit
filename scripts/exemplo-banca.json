@@ -1,0 +1,25 @@
+{
+  "banca": {
+    "name": "Banca da Thalita",
+    "slug": "thalita"
+  },
+  "areas": [
+    { "name": "Cível",       "monthlyBudgetUsd": 300, "alertThresholdPct": 80 },
+    { "name": "Trabalhista", "monthlyBudgetUsd": 300, "alertThresholdPct": 80 },
+    { "name": "Contratos",   "monthlyBudgetUsd": 200, "alertThresholdPct": 80 }
+  ],
+  "advogados": [
+    { "email": "thalita@banca.exemplo",  "name": "Thalita <sobrenome>", "role": "owner",   "area": "Cível" },
+    { "email": "advogado1@banca.exemplo","name": "Advogado 1",          "role": "manager", "area": "Trabalhista" },
+    { "email": "advogado2@banca.exemplo","name": "Advogado 2",          "role": "member",  "area": "Cível" },
+    { "email": "advogado3@banca.exemplo","name": "Advogado 3",          "role": "member",  "area": "Contratos" }
+  ],
+  "budget": {
+    "monthlyLimitUsd": 1000,
+    "isHardLimit": true
+  },
+  "policies": {
+    "blockInjection": false,
+    "citationCheck": "on_demand"
+  }
+}
