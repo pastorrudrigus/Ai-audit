@@ -19,12 +19,18 @@ export interface ExtractedText {
 export type SupportedMime =
   | "application/pdf"
   | "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  | "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  | "application/vnd.ms-excel"
+  | "text/csv"
   | "text/plain"
   | "text/markdown";
 
 export const SUPPORTED_MIMES: readonly SupportedMime[] = [
   "application/pdf",
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
   "text/plain",
   "text/markdown",
 ] as const;
@@ -38,6 +44,9 @@ export function guessMimeFromFilename(filename: string): string | null {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".pdf")) return "application/pdf";
   if (lower.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (lower.endsWith(".xls")) return "application/vnd.ms-excel";
+  if (lower.endsWith(".csv")) return "text/csv";
   if (lower.endsWith(".txt")) return "text/plain";
   if (lower.endsWith(".md")) return "text/markdown";
   return null;
@@ -61,6 +70,29 @@ export async function extractText(
     const { value } = await mammoth.extractRawText({ buffer });
     const text = normalize(value);
     return { text, charCount: text.length };
+  }
+
+  if (
+    mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    mimeType === "application/vnd.ms-excel" ||
+    mimeType === "text/csv"
+  ) {
+    // XLSX/XLS/CSV via SheetJS. Cada aba vira um bloco CSV com header
+    // "[Aba: <nome>]" para o LLM entender qual planilha está lendo. CSV é
+    // mais compacto que markdown e é o formato que o LLM lida melhor.
+    const XLSX = await import("xlsx");
+    const wb = XLSX.read(buffer, { type: "buffer" });
+    const parts: string[] = [];
+    for (const sheetName of wb.SheetNames) {
+      const sheet = wb.Sheets[sheetName];
+      if (!sheet) continue;
+      const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+      const trimmed = csv.trim();
+      if (!trimmed) continue;
+      parts.push(`[Aba: ${sheetName}]\n${trimmed}`);
+    }
+    const text = normalize(parts.join("\n\n"));
+    return { text, charCount: text.length, pageCount: wb.SheetNames.length };
   }
 
   // text/plain e text/markdown

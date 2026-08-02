@@ -69,6 +69,16 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function formatPageCount(mime: string, n: number | null | undefined): string | null {
+  if (!n) return null;
+  if (mime === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    || mime === "application/vnd.ms-excel") {
+    return `${n} aba${n === 1 ? "" : "s"}`;
+  }
+  if (mime === "application/pdf") return `${n}p`;
+  return null;
+}
+
 type CitStatus = "confirmada" | "divergente" | "nao_encontrada" | "erro";
 
 interface VerifiedCitation {
@@ -413,7 +423,7 @@ export default function ConversationPage() {
                         <FileText className="w-3 h-3 text-[#1F5C45]" />
                         <span className="max-w-[220px] truncate">{a.filename}</span>
                         <span className="text-slate-400">
-                          {a.pageCount ? `${a.pageCount}p · ` : ""}{formatBytes(a.sizeBytes)}
+                          {formatPageCount(a.mimeType, a.pageCount) ? `${formatPageCount(a.mimeType, a.pageCount)} · ` : ""}{formatBytes(a.sizeBytes)}
                         </span>
                         {a.status === "failed" && (
                           <span className="text-[10px] text-amber-700">falha</span>
@@ -582,8 +592,8 @@ export default function ConversationPage() {
                   <FileText className="w-3 h-3 text-[#1F5C45]" />
                   <span className="max-w-[220px] truncate">{a.filename}</span>
                   <span className="text-slate-400">
-                    {a.pageCount ? `${a.pageCount}p · ` : ""}{formatBytes(a.sizeBytes)}
-                    {a.charCount > 0 ? ` · ${a.charCount.toLocaleString("pt-BR")} car.` : ""}
+                    {formatPageCount(a.mimeType, a.pageCount) ? `${formatPageCount(a.mimeType, a.pageCount)} · ` : ""}{formatBytes(a.sizeBytes)}
+                    {a.charCount > 0 ? ` · ${a.charCount.toLocaleString("pt-BR")} caracteres` : ""}
                   </span>
                   <button
                     onClick={() => handleRemovePending(a.id)}
@@ -606,7 +616,7 @@ export default function ConversationPage() {
             <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Escreva a consulta, cole a peça, ou anexe PDF/DOCX..."
+              placeholder="Escreva a consulta, cole a peça, ou anexe PDF, DOCX, planilha ou TXT..."
               className="pl-11 pr-12 resize-none min-h-[52px] max-h-[240px] bg-white"
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
@@ -619,7 +629,7 @@ export default function ConversationPage() {
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+              accept=".pdf,.docx,.xlsx,.xls,.csv,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/plain,text/markdown"
               className="hidden"
               onChange={(e) => e.target.files && handleUploadFiles(e.target.files)}
             />
@@ -629,7 +639,7 @@ export default function ConversationPage() {
               className="absolute bottom-2 left-2 h-8 w-8 text-slate-500 hover:text-[#1F5C45]"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              title="Anexar PDF, DOCX ou TXT"
+              title="Anexar PDF, DOCX, planilha (XLSX/CSV) ou TXT"
               type="button"
             >
               <Paperclip className="w-4 h-4" />
