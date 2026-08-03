@@ -5,8 +5,8 @@ dotenv.config({ path: "../../.env" });
 export default {
   schema: "./schema",
   out: "./migrations",
-  driver: "pg",
+  dialect: "postgresql",
   dbCredentials: {
-    connectionString: process.env.DATABASE_URL!,
+    url: process.env.DATABASE_URL ?? "postgres://placeholder",
   },
 } satisfies Config;

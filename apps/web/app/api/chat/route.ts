@@ -33,11 +33,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Message or attachments required" }, { status: 400 });
   }
 
-  // Get user
-  const user = await db.query.users.findFirst({
+  // Get or lazily create user — no free-tier bootstrap não existe seed dos
+  // advogados; o primeiro POST após signup no Clerk cria o registro aqui,
+  // amarrando clerkId ↔ orgId. Em provisionamento real (provision-banca)
+  // o registro já existe e este branch é no-op.
+  let user = await db.query.users.findFirst({
     where: (u, { eq, and }) =>
       and(eq(u.orgId, orgId), eq(u.clerkId, clerkUserId)),
   });
+  if (!user) {
+    const [created] = await db.insert(users).values({
+      orgId,
+      clerkId: clerkUserId,
+      email: `${clerkUserId}@pending.tutela`,
+      name: "Novo advogado",
+      role: "member",
+      isActive: true,
+    }).returning();
+    user = created;
+  }
 
   // Get or create conversation
   let convId = conversationId;
@@ -46,7 +60,7 @@ export async function POST(req: NextRequest) {
       ((message || "").length > 60 ? "..." : "");
     const [conv] = await db.insert(conversations).values({
       orgId,
-      userId: user?.id ?? orgId,
+      userId: user.id,
       title,
     }).returning();
     convId = conv.id;
