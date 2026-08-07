@@ -15,14 +15,11 @@ COPY packages/verify/package.json ./packages/verify/
 
 RUN pnpm install --frozen-lockfile
 
-# ---------- builder ----------
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN pnpm --filter @aigate/gateway build
-
 # ---------- runner ----------
+# Sem build step separado: o gateway roda TypeScript direto com tsx.
+# tsx transpila on-the-fly e resolve os workspace packages via symlink,
+# evitando o problema de packages/*/package.json apontar "main" pra .ts
+# que quebra em Node ESM puro.
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
@@ -30,13 +27,14 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 gateway
 
-COPY --from=builder --chown=gateway:nodejs /app/apps/gateway/dist ./dist
-COPY --from=builder --chown=gateway:nodejs /app/apps/gateway/package.json ./
-COPY --from=builder --chown=gateway:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=gateway:nodejs /app/packages ./packages
+COPY --from=deps --chown=gateway:nodejs /app/node_modules ./node_modules
+COPY --chown=gateway:nodejs apps/gateway ./apps/gateway
+COPY --chown=gateway:nodejs packages ./packages
+COPY --chown=gateway:nodejs package.json pnpm-workspace.yaml ./
 
 USER gateway
 EXPOSE 3001
 ENV GATEWAY_PORT=3001
 
-CMD ["node", "dist/server.js"]
+WORKDIR /app/apps/gateway
+CMD ["node", "--import", "tsx/esm", "server.ts"]
