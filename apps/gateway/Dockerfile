@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 FROM node:22-alpine AS base
-RUN apk add --no-cache libc6-compat
+RUN apk add --no-cache libc6-compat postgresql-client
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
 # ---------- deps ----------
@@ -16,10 +16,10 @@ COPY packages/verify/package.json ./packages/verify/
 RUN pnpm install --frozen-lockfile
 
 # ---------- runner ----------
-# Sem build step separado: o gateway roda TypeScript direto com tsx.
-# tsx transpila on-the-fly e resolve os workspace packages via symlink,
-# evitando o problema de packages/*/package.json apontar "main" pra .ts
-# que quebra em Node ESM puro.
+# tsx roda TS direto em vez de compilar (o gateway compilava via tsc mas
+# os workspace packages apontam "main" pra .ts e Node ESM quebra em
+# directory imports). psql aplica as migrations no boot — idempotente
+# com IF NOT EXISTS / EXCEPTION.
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
@@ -36,5 +36,4 @@ USER gateway
 EXPOSE 3001
 ENV GATEWAY_PORT=3001
 
-WORKDIR /app/apps/gateway
-CMD ["node", "--import", "tsx/esm", "server.ts"]
+CMD ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=0 -f /app/packages/db/all-migrations.sql 2>&1 | tail -20 && cd /app/apps/gateway && exec node --import tsx/esm server.ts"]

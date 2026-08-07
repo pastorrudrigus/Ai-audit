@@ -4,7 +4,8 @@ dockerfilePath = "apps/gateway/Dockerfile"
 buildCommand = ""
 
 [deploy]
-startCommand = "node dist/server.js"
+# CMD do Dockerfile já roda migrations + tsx server.ts; nao setar
+# startCommand pra nao sobrescrever.
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
