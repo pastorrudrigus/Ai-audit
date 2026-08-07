@@ -84,9 +84,6 @@ importers:
       '@clerk/nextjs':
         specifier: ^5.2.4
         version: 5.7.6(next@14.2.35(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@neondatabase/serverless':
-        specifier: ^0.9.3
-        version: 0.9.5
       '@radix-ui/react-alert-dialog':
         specifier: ^1.1.1
         version: 1.1.23(@types/react-dom@18.3.7(@types/react@18.3.31))(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -134,7 +131,7 @@ importers:
         version: 2.1.1
       drizzle-orm:
         specifier: 0.30.10
-        version: 0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(react@18.3.1)
+        version: 0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(postgres@3.4.9)(react@18.3.1)
       fuse.js:
         specifier: ^7.0.0
         version: 7.5.0
@@ -213,7 +210,7 @@ importers:
         version: link:../db
       drizzle-orm:
         specifier: 0.30.10
-        version: 0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(react@18.3.1)
+        version: 0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(postgres@3.4.9)(react@18.3.1)
       fuse.js:
         specifier: ^7.0.0
         version: 7.5.0
@@ -236,15 +233,15 @@ importers:
 
   packages/db:
     dependencies:
-      '@neondatabase/serverless':
-        specifier: ^0.9.3
-        version: 0.9.5
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
       drizzle-orm:
         specifier: 0.30.10
-        version: 0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(react@18.3.1)
+        version: 0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(postgres@3.4.9)(react@18.3.1)
+      postgres:
+        specifier: ^3.4.4
+        version: 3.4.9
     devDependencies:
       '@types/node':
         specifier: ^20.12.12
@@ -3341,6 +3338,10 @@ packages:
   postgres-range@1.1.4:
     resolution: {integrity: sha512-i/hbxIE9803Alj/6ytL7UHQxRvZkI9O4Sy+J3HGc4F4oo/2eQAjTSNJ0bfxyse3bH0nuVesCk+3IRLaMtG3H6w==}
 
+  postgres@3.4.9:
+    resolution: {integrity: sha512-GD3qdB0x1z9xgFI6cdRD6xu2Sp2WCOEoe3mtnyB5Ee0XrrL5Pe+e4CCnJrRMnL1zYtRDZmQQVbvOttLnKDLnaw==}
+    engines: {node: '>=12'}
+
   process-nextick-args@2.0.1:
     resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
 
@@ -4597,6 +4598,7 @@ snapshots:
   '@neondatabase/serverless@0.9.5':
     dependencies:
       '@types/pg': 8.11.6
+    optional: true
 
   '@next/env@14.2.35': {}
 
@@ -5554,6 +5556,7 @@ snapshots:
       '@types/node': 20.19.43
       pg-protocol: 1.15.0
       pg-types: 4.1.0
+    optional: true
 
   '@types/prop-types@15.7.15': {}
 
@@ -5970,12 +5973,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(react@18.3.1):
+  drizzle-orm@0.30.10(@neondatabase/serverless@0.9.5)(@opentelemetry/api@1.9.1)(@types/pg@8.11.6)(@types/react@18.3.31)(postgres@3.4.9)(react@18.3.1):
     optionalDependencies:
       '@neondatabase/serverless': 0.9.5
       '@opentelemetry/api': 1.9.1
       '@types/pg': 8.11.6
       '@types/react': 18.3.31
+      postgres: 3.4.9
       react: 18.3.1
 
   duck@0.1.12:
@@ -6610,7 +6614,8 @@ snapshots:
 
   obliterator@2.0.5: {}
 
-  obuf@1.1.2: {}
+  obuf@1.1.2:
+    optional: true
 
   obug@2.1.4: {}
 
@@ -6651,11 +6656,14 @@ snapshots:
     dependencies:
       node-ensure: 0.0.0
 
-  pg-int8@1.0.1: {}
+  pg-int8@1.0.1:
+    optional: true
 
-  pg-numeric@1.0.2: {}
+  pg-numeric@1.0.2:
+    optional: true
 
-  pg-protocol@1.15.0: {}
+  pg-protocol@1.15.0:
+    optional: true
 
   pg-types@4.1.0:
     dependencies:
@@ -6666,6 +6674,7 @@ snapshots:
       postgres-date: 2.1.0
       postgres-interval: 3.0.0
       postgres-range: 1.1.4
+    optional: true
 
   picocolors@1.1.1: {}
 
@@ -6741,17 +6750,24 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  postgres-array@3.0.4: {}
+  postgres-array@3.0.4:
+    optional: true
 
   postgres-bytea@3.0.0:
     dependencies:
       obuf: 1.1.2
+    optional: true
 
-  postgres-date@2.1.0: {}
+  postgres-date@2.1.0:
+    optional: true
 
-  postgres-interval@3.0.0: {}
+  postgres-interval@3.0.0:
+    optional: true
 
-  postgres-range@1.1.4: {}
+  postgres-range@1.1.4:
+    optional: true
+
+  postgres@3.4.9: {}
 
   process-nextick-args@2.0.1: {}
 

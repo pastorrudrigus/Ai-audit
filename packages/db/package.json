@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.30.10",
-    "@neondatabase/serverless": "^0.9.3",
+    "postgres": "^3.4.4",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
