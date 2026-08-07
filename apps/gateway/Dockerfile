@@ -36,4 +36,4 @@ USER gateway
 EXPOSE 3001
 ENV GATEWAY_PORT=3001
 
-CMD ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=0 -f /app/packages/db/all-migrations.sql 2>&1 | tail -20 && cd /app/apps/gateway && exec node --import tsx/esm server.ts"]
+CMD ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=0 -f /app/packages/db/all-migrations.sql 2>&1 | tail -20 && cd /app/apps/gateway && exec node --import tsx server.ts"]
