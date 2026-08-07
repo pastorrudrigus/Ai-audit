@@ -33,6 +33,7 @@ RUN addgroup --system --gid 1001 nodejs && \
 COPY --from=builder --chown=gateway:nodejs /app/apps/gateway/dist ./dist
 COPY --from=builder --chown=gateway:nodejs /app/apps/gateway/package.json ./
 COPY --from=builder --chown=gateway:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=gateway:nodejs /app/packages ./packages
 
 USER gateway
 EXPOSE 3001
