@@ -13,9 +13,7 @@ COPY packages/db/package.json ./packages/db/
 COPY packages/core/package.json ./packages/core/
 COPY packages/verify/package.json ./packages/verify/
 
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
-    pnpm config set store-dir /pnpm-store && \
-    pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile
 
 # ---------- builder ----------
 FROM base AS builder
